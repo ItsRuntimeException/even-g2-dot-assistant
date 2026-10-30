@@ -1,0 +1,311 @@
+{
+  "name": "Dot Assistant",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dot-assistant-with-vosk",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "a43f1286-1c31-4ae8-94da-f7f33021cc90",
+      "name": "Dot Webhook",
+      "webhookId": "8c6c1538-e968-4d9b-8ae7-80e6b4c9c68f"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.transcript.replace(/^\\s*hey\\s+dot\\b[\\s,.:;!?-]*/i, '') }}",
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "You are Dot, a helpful personal assistant for Even G2. Keep answers concise and easy to read on a small glasses display. Use the Calculator tool for arithmetic when helpful.\n\nFor requests about current weather, temperature, or forecast:\n- If the user has not provided a city or location in the current message or recent conversation, ask which city or location they mean. Do not guess from device/IP location; you do not have reliable access to it.\n- If a city or location is known, call the HTTP Request weather tool with that location before answering. Use the returned data; do not make up current conditions.\n- Give the location, current temperature, and conditions; include feels-like temperature or update time when available. Keep it brief.\n- If the weather tool fails or cannot find the location, say you could not retrieve it and ask for a more specific city/region or suggest trying again. Do not claim you lack internet/weather access when the tool is available.\n\nFor other questions, answer helpfully using the conversation and tools. Be clear about uncertainty. Do not claim to have sent messages, changed calendars, or completed purchases. Ask for approval before any external action."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        680,
+        300
+      ],
+      "id": "c9108e49-71ae-44a4-891f-a6f8ab5d6319",
+      "name": "AI Agent",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        520
+      ],
+      "id": "06444b6b-0ed9-47a2-bcca-3b2b0173f38f",
+      "name": "OpenAI Chat Model"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.body.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        650,
+        520
+      ],
+      "id": "16b210b2-6241-4552-99e6-e55a61f3fa5c",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        840,
+        520
+      ],
+      "id": "63eedca1-cb3d-42a2-9b3a-90c6708c426b",
+      "name": "Calculator"
+    },
+    {
+      "parameters": {
+        "model": "gpt-oss:20b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        540,
+        700
+      ],
+      "id": "447a0f4e-2c2d-4cde-8b5a-8bbf6f7ec2f1",
+      "name": "Ollama Chat Model"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetch current weather conditions for a city or location provided by the user. Provide the city and country or region as the location. Use this tool instead of guessing current weather.",
+        "method": "GET",
+        "url": "={{ 'https://wttr.in/' + encodeURIComponent($fromAI('location', 'City and country or region to fetch current weather for', 'string')) + '?format=j1' }}",
+        "authentication": "none",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        520
+      ],
+      "id": "e3fcb41e-a386-433f-8970-5ef30d38482d",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:18080/transcribe",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "audio",
+        "options": {
+          "timeout": 50000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ],
+      "id": "26fc10b7-b5d4-4c0b-a350-0f67bcde7810",
+      "name": "Transcribe with NAS Vosk",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        560,
+        300
+      ],
+      "id": "95168fdc-89b7-4a89-9438-3d0db27bfde1",
+      "name": "Keep session and transcript"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { reply: $json.output || (typeof $json.error === 'string' ? $json.error : ($json.error && $json.error.message)) || $json.message || 'The workflow failed without an error message.', transcript: $('Keep session and transcript').first().json.transcript || '' } }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        920,
+        300
+      ],
+      "id": "0782022e-7c57-4b60-89fd-58c80dc3394f",
+      "name": "Return Reply"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { reply: typeof $json.error === 'string' ? $json.error : ($json.error && $json.error.message) || $json.message || 'Could not transcribe audio with NAS Vosk.', transcript: '' } }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        460,
+        80
+      ],
+      "id": "1d9efda8-0acb-40c9-a111-fcc43a1ee1aa",
+      "name": "Return Transcription Error"
+    }
+  ],
+  "connections": {
+    "Dot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Transcribe with NAS Vosk",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Keep session and transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe with NAS Vosk": {
+      "main": [
+        [
+          {
+            "node": "Keep session and transcript",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Return Transcription Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep session and transcript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Return Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "392f9e87-1d3f-4566-a6dd-90f5e95d49fe",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

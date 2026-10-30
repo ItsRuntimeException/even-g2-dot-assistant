@@ -1,0 +1,31 @@
+services:
+  vosk-wake:
+    build:
+      context: ./vosk-wake
+    restart: unless-stopped
+    expose:
+      - "2700"
+
+  vosk:
+    image: alphacep/kaldi-en:latest
+    restart: unless-stopped
+    expose:
+      - "2700"
+
+  vosk-http-bridge:
+    build:
+      context: ./vosk-http-bridge
+    restart: unless-stopped
+    environment:
+      VOSK_WS_URL: ws://vosk:2700
+      VOSK_WAKE_WS_URL: ws://vosk-wake:2700
+      VOSK_STREAM_TOKEN: ${VOSK_STREAM_TOKEN:-}
+    ports:
+      - "127.0.0.1:18080:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vosk-listen.rule=Host(`${VOSK_PUBLIC_HOST:-n8n.example.com}`) && Path(`/listen`)"
+      - "traefik.http.routers.vosk-listen.entrypoints=web,${TRAEFIK_HTTPS_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.vosk-listen.tls=true"
+      - "traefik.http.routers.vosk-listen.service=vosk-listen"
+      - "traefik.http.services.vosk-listen.loadbalancer.server.url=http://127.0.0.1:18080"
